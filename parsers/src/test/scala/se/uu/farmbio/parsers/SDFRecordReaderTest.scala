@@ -1,14 +1,14 @@
 package se.uu.farmbio.parsers
 
-import org.apache.hadoop.mapred.JobConf
+import java.io.File
 import scala.collection.mutable.ListBuffer
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapred.Reporter
-import java.io.File
 import org.apache.hadoop.mapred.FileSplit
+import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.Reporter
+import org.junit.runner.RunWith
+import org.mockito.Mockito.mock
 import org.scalatest.FunSuite
-import org.mockito.Mockito._
-import org.junit.runner.RunWith 
 import org.scalatest.junit.JUnitRunner
 
 @RunWith(classOf[JUnitRunner])

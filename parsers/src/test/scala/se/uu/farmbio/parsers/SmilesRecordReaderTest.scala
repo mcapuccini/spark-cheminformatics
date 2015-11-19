@@ -1,15 +1,15 @@
 package se.uu.farmbio.parsers
 
-import org.scalatest.FunSuite
-import org.apache.hadoop.mapred.JobConf
-import org.junit.runner.RunWith
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapred.Reporter
 import java.io.File
-import org.apache.hadoop.mapred.FileSplit
 import scala.io.Source
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapred.FileSplit
+import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.Reporter
+import org.junit.runner.RunWith
+import org.mockito.Mockito.mock
+import org.scalatest.FunSuite
 import org.scalatest.junit.JUnitRunner
-import org.mockito.Mockito._
 
 @RunWith(classOf[JUnitRunner])
 class SmilesRecordReaderTest extends FunSuite {

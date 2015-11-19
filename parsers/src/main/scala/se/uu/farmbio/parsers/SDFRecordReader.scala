@@ -1,12 +1,11 @@
 package se.uu.farmbio.parsers
 
+import org.apache.hadoop.io.DataOutputBuffer
+import org.apache.hadoop.io.LongWritable
+import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.FileSplit
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.RecordReader
-import org.apache.hadoop.io.Text
-import org.apache.hadoop.io.LongWritable
-import org.apache.hadoop.fs.FSDataInputStream
-import org.apache.hadoop.io.DataOutputBuffer
 
 object SDFRecordReader {
   val SIZE_PROPERTY_NAME = "se.uu.farmbio.vs.io.SDFRecordReader.size"

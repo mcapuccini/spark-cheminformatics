@@ -1,11 +1,11 @@
 package se.uu.farmbio.parsers
 
-import org.apache.hadoop.mapred.RecordReader
-import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.LongWritable
-import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.FileSplit
+import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.LineRecordReader
+import org.apache.hadoop.mapred.RecordReader
 
 object SmilesRecordReader {
   val SIZE_PROPERTY_NAME = "se.uu.farmbio.vs.io.SmilesRecordReader.size"
