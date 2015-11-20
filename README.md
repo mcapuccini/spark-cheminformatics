@@ -1,4 +1,4 @@
-# Spark cheminformatics tools
+# Spark cheminformatics utils
 
 This repository contains some utilities that can be used to build Spark-based massively parallel cheminformatics pipelines.
 
