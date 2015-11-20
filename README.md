@@ -4,7 +4,7 @@ This repository contains some utilities that can be used to build Spark-based ma
 
 ## Parsers
 
-This package provides custom Spark input formats for chemical structures. In order to use it in you maven project please add this entries to your pom.xml file:
+This package provides custom Spark input formats for chemical structures. To use it in your maven project please add this entries to your pom.xml file:
 
     <repositories>
         ...
