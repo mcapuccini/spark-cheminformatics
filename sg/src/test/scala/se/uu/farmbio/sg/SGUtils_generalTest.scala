@@ -1,5 +1,6 @@
 package se.uu.farmbio.sg
 
+
 import org.junit.runner.RunWith
 import org.scalatest._
 import org.scalatest.FunSuite
@@ -13,15 +14,15 @@ import se.uu.farmbio.sg.types._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.DenseVector
 import org.apache.spark.mllib.linalg.SparseVector
+import org.apache.spark.SharedSparkContext
 
 /**
  * @author staffan
  */
 @RunWith(classOf[JUnitRunner])
-class SGUtils_general_Test extends FunSuite with BeforeAndAfter {
+class SGUtils_generalTest extends FunSuite with BeforeAndAfter with SharedSparkContext {
 
 	SparkUtils.silenceSpark();
-	val sc: SparkContext = SparkUtils.init("local[4]");
 	var tempDirPath: Path =_;
 	var absDir: String =_;
 
@@ -61,7 +62,9 @@ class SGUtils_general_Test extends FunSuite with BeforeAndAfter {
 		val loaded_sign_mapping = SGUtils.loadSign2IDMapping(sc, absDir+"/signMapping");
 
 		//Check that count == 4
-		assert(loaded_sign_mapping.count() == sign_mapping_rdd.count && loaded_sign_mapping.count()==4, 
+		assert(loaded_sign_mapping.count == 4, 
+				"The length before saving/loading should be the same as after");
+		assert(loaded_sign_mapping.count == sign_mapping_rdd.count,
 				"The length before saving/loading should be the same as after");
 	}
 

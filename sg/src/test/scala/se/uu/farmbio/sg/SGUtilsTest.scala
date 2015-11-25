@@ -11,39 +11,46 @@ import se.uu.farmbio.sg.types._
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import se.uu.farmbio.utils.SparkUtils
+import org.apache.spark.SharedSparkContext
+import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.RDD._
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.SparseVector
 import org.apache.spark.mllib.linalg.DenseVector
 import java.nio.file._
 import scala.collection.immutable.Map
 
-/**
- * @author staffan
- */
-@RunWith(classOf[JUnitRunner])
-class SGUtils_Test extends FunSuite with BeforeAndAfter {
 
-	SparkUtils.silenceSpark();
-	val sc: SparkContext = SparkUtils.init("local[4]");
-	var tempDirPath: Path =_;
-	var absDir: String =_;
-
-	//var sign_mapping_rdd: RDD[Sig2ID_Mapping] = null;
-	// (Int, Double, Map[String,Int])
-	val signRecDec_carry: RDD[(Int,SignatureRecordDecision)]=sc.makeRDD(Seq(
+object DataForTest{
+  
+  val trueListOfSignatures = List("C", "CO", "COO", "O", "IOOC", "OKO", "I", "CC", "p[C]", "CpC");
+  
+  def getSignRecDec_carry(sc: SparkContext): RDD[(Int,SignatureRecordDecision)] = {
+    sc.parallelize(Seq(
 			(1, (1.0, Map(("C",1), ("COO",2),("I",3),("IOOC",4)))),
 			(3, (0.0, Map(("C",2), ("CO",2),("OKO",1)))),
 			(42, (0.0, Map(("C",3), ("COO",1),("O",3)))),
 			(1337, (1.0, Map(("C",1), ("CO",1),("O",3),("CC",5), ("p[C]", 1),("CpC",1))))
 			));
-	val trueListOfSignatures = List("C", "CO", "COO", "O", "IOOC", "OKO", "I", "CC", "p[C]", "CpC");
-	// So num molecules = 4, tot num sign; C, CO, COO, O, IOOC, OKO, I, CC, p[C], CpC = 10 
+  }
+  
+  def getSig2ID_carry(rdd: RDD[(Int,SignatureRecordDecision)]) = {
+    SGUtils.sig2ID_carryData(rdd)
+  }
+  
+  def getSig2ID_withOutCarry(rdd: RDD[SignatureRecordDecision]) = {
+    SGUtils.sig2ID(rdd);
+  }
+}
 
-	val (rdd_withID_carryData, sig2Id_mapping_carryData)= SGUtils.sig2ID_carryData(signRecDec_carry);
-	val signRecDec = signRecDec_carry.map{case(_:Int,x)=>x}; // remove the carryData-part
-	val (rdd_withID, sig2Id_mapping)= SGUtils.sig2ID(signRecDec);
+/**
+ * @author staffan
+ */
+@RunWith(classOf[JUnitRunner])
+class SGUtilsTest extends FunSuite with SharedSparkContext with BeforeAndAfter {
 
-
+	SparkUtils.silenceSpark();
+	
 	/**
 	 * atom2LP should return the correct stuff
 	 */
@@ -62,15 +69,9 @@ class SGUtils_Test extends FunSuite with BeforeAndAfter {
 	  val sigMapping: RDD[(String, Long)] = sc.parallelize(Seq(("[C]", 1L), ("[C]([O])",3L)));
 		val mol2 = sp.parseSmiles("CO");
 		val lp_nonEmpty = SGUtils.atom2LP(mol2, -150.0, sigMapping, 0, 2);
-    
-
-		//lp_nonEmpty.features.toDense.toArray.foreach(println) // this throws error!
 
 		assert(lp_nonEmpty.label == -150.0, "The given label should be the one returned");
 		
-		//println("atom2LP:");
-		//lp_nonEmpty.features.toDense.toArray.foreach(println);
-		//The dense representation is the array= [0.0, 1.0, 0.0, 1.0] as [C]=1 and [C]([O]) = 3 
 		val denseRep = Array(0.0, 1.0, 0.0, 1.0);
 		assert(TestUtils.matchArrays(lp_nonEmpty.features.toDense.toArray,denseRep), 
 		    "The correct LP-s should be created");
@@ -218,20 +219,22 @@ class SGUtils_Test extends FunSuite with BeforeAndAfter {
 	 */
 	test("sig2ID_carryData & getFeatureVectors_carryData"){
 
-
-
+	  val rdd = DataForTest.getSignRecDec_carry(sc);
+    val (rdd_withID_carryData, sig2Id_mapping_carryData) = DataForTest.getSig2ID_carry(rdd)
+	  
 		// Check that the sig2Id_mapping is correct:
 		// num signatures should be 10
-		assert(sig2Id_mapping_carryData.count == trueListOfSignatures.length, "The number of unique signatures = 10");
+		assert(sig2Id_mapping_carryData.count == DataForTest.trueListOfSignatures.length, "The number of unique signatures = 10");
 
     val signatures = sig2Id_mapping_carryData.map { case(sig: String, _: Long) => sig }.collect;
-		assert(TestUtils.compareEqualLists(trueListOfSignatures, signatures.toList), 
+		assert(TestUtils.compareEqualLists(DataForTest.trueListOfSignatures, signatures.toList), 
 				"The found signatures should be correct");
 		assert(sig2Id_mapping_carryData.map { case (sign: String, id: Long) => id }.distinct.count == 10, 
 				"each SignID-value should be unique!");
 
-
+		
 		// Check that rdd_withID is "correct", good-enough..
+		val signRecDec_carry = rdd;
 		assert(rdd_withID_carryData.count== signRecDec_carry.count, 
 				"The number of molecule-records should be the same before and after");
 		// the carryData should be the same..
@@ -283,14 +286,19 @@ class SGUtils_Test extends FunSuite with BeforeAndAfter {
 	 * sig2ID & getFeatureVectors
 	 */
 	test("sig2ID & getFeatureVectors"){
-
+	  
+	  val rdd_Without = DataForTest.getSignRecDec_carry(sc).map(_._2);
+	  val (rdd_withID, sig2Id_mapping) = DataForTest.getSig2ID_withOutCarry(rdd_Without);
+	  
+	  val signRecDec_carry = DataForTest.getSignRecDec_carry(sc);
+    val (rdd_withID_carryData, sig2Id_mapping_carryData) = DataForTest.getSig2ID_carry(signRecDec_carry)
 
 		// Check that the sig2Id_mapping is correct:
 		// num signatures should be 10
-		assert(sig2Id_mapping.count == trueListOfSignatures.length, "The number of unique signatures = 10");
+		assert(sig2Id_mapping.count == DataForTest.trueListOfSignatures.length, "The number of unique signatures = 10");
 
     val signatures = sig2Id_mapping_carryData.map { case(sig: String, _: Long) => sig }.collect;
-		assert(TestUtils.compareEqualLists(trueListOfSignatures, signatures.toList), 
+		assert(TestUtils.compareEqualLists(DataForTest.trueListOfSignatures, signatures.toList), 
 				"The found signatures should be correct");
 		assert(sig2Id_mapping.map { case (sign: String, id: Long) => id }.distinct.count == 10, 
 				"each SignID-value should be unique!");
@@ -342,6 +350,10 @@ class SGUtils_Test extends FunSuite with BeforeAndAfter {
 	 * sig2LP
 	 */
 	test("sig2LP"){
+	  
+	  val signRecDec = DataForTest.getSignRecDec_carry(sc).map{case(_:Int,x)=>x}; // remove the carryData-part
+	  val (rdd_withID, sig2Id_mapping)= SGUtils.sig2ID(signRecDec);
+	  
 		val lp_out = SGUtils.sig2LP(rdd_withID);
 		// SignatureRecordDecision_ID = (Double, Map[Long, Int])
 		val firstLP = lp_out.take(1)(0);
@@ -364,6 +376,8 @@ class SGUtils_Test extends FunSuite with BeforeAndAfter {
 	 * sig2LP_carryData
 	 */
 	test("sig2LP_carryData"){
+	  val signRecDec_carry = DataForTest.getSignRecDec_carry(sc)
+	  val (rdd_withID_carryData, _)= SGUtils.sig2ID_carryData(signRecDec_carry);
 		val lp_out = SGUtils.sig2LP_carryData(rdd_withID_carryData).collect;
 		val recs = rdd_withID_carryData.collect;
 		val rec1 = recs.find({case(id: Int, rest)=>if(id==1) true else false}).get._2;
@@ -391,9 +405,4 @@ class SGUtils_Test extends FunSuite with BeforeAndAfter {
 		}
 	}
 
-	test("Ending test.."){
-		// works as tare-down of the complete file
-		SparkUtils.shutdown(sc);
-		assert(true);
-	}
 }

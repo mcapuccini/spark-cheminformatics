@@ -8,7 +8,6 @@ import org.openscience.cdk.silent.SilentChemObjectBuilder
 object SG_Example {
   def main(args: Array[String]): Unit = {
     SparkUtils.silenceSpark();
-		//Logger.getLogger("metpred2").setLevel(Level.OFF);
 		val sc = SparkUtils.init("local[*]");
     
 		// Generate data, typically done by the parsers-library  
@@ -25,7 +24,8 @@ object SG_Example {
     val moleculesAfterSG = mols.map{case(dec_class, molecule) => SGUtils.atom2SigRecordDecision(molecule, dec_class, h_start=1, h_stop=3)};
     val (result, sig2ID_universe) = SGUtils.sig2ID(moleculesAfterSG);
     val resultAsLP = SGUtils.sig2LP(result);
-    // Use the labeledPoints to build a classifier of your own choice 
+    // Use the labeledPoints to build a classifier of your own choice
+    // ...
     
     
     // when you wish to test molecules, you will only care of the signatures that
@@ -40,6 +40,7 @@ object SG_Example {
 		    (0.0, testMol2)));
 		
 		val testLPs = SGUtils.atoms2LP(testMols, sig2ID_universe, h_start=1, h_stop=3);
-		//Use the previously created classifier to test these molecules. 
+		// Use the previously created classifier to test these molecules.
+		// ...
   }
 }
