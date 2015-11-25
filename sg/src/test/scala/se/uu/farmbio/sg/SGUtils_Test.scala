@@ -89,7 +89,7 @@ class SGUtils_Test extends FunSuite with BeforeAndAfter {
 		val mol2 = sp.parseSmiles("CO");
 		val mol_rdd = sc.parallelize(Seq(("mol1", 1.0, mol),("mol2", 15.0, mol2)));
 	  
-	  val lps_should_be_empty = SGUtils.atoms2LP_carryData(mol_rdd, emptySigMapping, h_start=0, h_stop=3, sc);
+	  val lps_should_be_empty = SGUtils.atoms2LP_carryData(mol_rdd, emptySigMapping, h_start=0, h_stop=3);
 	  val lp_arr = lps_should_be_empty.collect();
 	  lp_arr.foreach{case(carryData:String,lp: LabeledPoint)=>
 	    if(carryData.equals("mol1")){
@@ -107,7 +107,7 @@ class SGUtils_Test extends FunSuite with BeforeAndAfter {
 	  // For NON-EMPTY mappings
 	  val sigMapping: RDD[(String, Long)] = sc.parallelize(Seq(("[C]", 1L), ("[C]([O])",2L)));
 	  
-	  val lps_nonEmpty = SGUtils.atoms2LP_carryData(mol_rdd, sigMapping, h_start=0, h_stop=3, sc).collect;
+	  val lps_nonEmpty = SGUtils.atoms2LP_carryData(mol_rdd, sigMapping, h_start=0, h_stop=3).collect;
 	  lps_nonEmpty.foreach{case(carryData:String,lp: LabeledPoint)=>
 	    if(carryData.equals("mol1")){
 	      assert(lp.label==1.0, "The label of mol1 should be the given one");
@@ -139,7 +139,7 @@ class SGUtils_Test extends FunSuite with BeforeAndAfter {
 		//val mol = sp.parseSmiles("C=O");
 		val mol2 = sp.parseSmiles("CO");
 		val mol_rdd = sc.parallelize(Seq(("mol2", 15.0, mol2)));
-		val (mol_data, newMapping_someData) = SGUtils.atoms2LP_UpdateSignMapCarryData(mol_rdd, emptySigMapping, h_start=0, h_stop=3, sc);
+		val (mol_data, newMapping_someData) = SGUtils.atoms2LP_UpdateSignMapCarryData(mol_rdd, emptySigMapping, h_start=0, h_stop=3);
 		
 		// Check that the Sig2ID_Mapping is correct
 		assert(TestUtils.compareEqualLists(newMapping_someData.map{case(sign: String, _:Long)=>sign}.collect.toList,
@@ -156,7 +156,7 @@ class SGUtils_Test extends FunSuite with BeforeAndAfter {
 	  // Starting with a existing mapping (but not complete cover)
 	  val mol = sp.parseSmiles("CC=O");
 		val mol_rdd2 = sc.parallelize(Seq(("mol1", -1.0, mol),("mol2", 15.0, mol2)));
-		val (mol_data2, newMapping_someData2) = SGUtils.atoms2LP_UpdateSignMapCarryData(mol_rdd2, newMapping_someData, h_start=0, h_stop=3, sc);
+		val (mol_data2, newMapping_someData2) = SGUtils.atoms2LP_UpdateSignMapCarryData(mol_rdd2, newMapping_someData, h_start=0, h_stop=3);
 	  
 		// Check that the mapping is updated and correct
 		assert(newMapping_someData2.subtract(newMapping_someData).count > 0, 
@@ -179,7 +179,7 @@ class SGUtils_Test extends FunSuite with BeforeAndAfter {
 		
 		// ------------------------------------------------------------------------
 	  // Starting with complete signature coverage
-		val (mol_data3, lastMapping) = SGUtils.atoms2LP_UpdateSignMapCarryData(mol_rdd, newMapping_someData2, h_start=0, h_stop=3, sc);
+		val (mol_data3, lastMapping) = SGUtils.atoms2LP_UpdateSignMapCarryData(mol_rdd, newMapping_someData2, h_start=0, h_stop=3);
 		val (molName4: String, lp4: LabeledPoint) = mol_data3.collect()(0)
 		
 		//Mapping should not have changed
@@ -342,7 +342,7 @@ class SGUtils_Test extends FunSuite with BeforeAndAfter {
 	 * sig2LP
 	 */
 	test("sig2LP"){
-		val lp_out = SGUtils.sig2LP(rdd_withID, sc);
+		val lp_out = SGUtils.sig2LP(rdd_withID);
 		// SignatureRecordDecision_ID = (Double, Map[Long, Int])
 		val firstLP = lp_out.take(1)(0);
 		assert(firstLP.features.numActives == 4, "the array should be 4 indicies long");
@@ -364,7 +364,7 @@ class SGUtils_Test extends FunSuite with BeforeAndAfter {
 	 * sig2LP_carryData
 	 */
 	test("sig2LP_carryData"){
-		val lp_out = SGUtils.sig2LP_carryData(rdd_withID_carryData, sc).collect;
+		val lp_out = SGUtils.sig2LP_carryData(rdd_withID_carryData).collect;
 		val recs = rdd_withID_carryData.collect;
 		val rec1 = recs.find({case(id: Int, rest)=>if(id==1) true else false}).get._2;
 		val rec3 = recs.find({case(id: Int, rest)=>if(id==3) true else false}).get._2;

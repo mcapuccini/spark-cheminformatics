@@ -11,7 +11,7 @@ import org.apache.spark.rdd._
 import org.apache.spark.rdd.RDD
 import java.lang.Long
 
-import uu.farmbio.sg.types._
+import se.uu.farmbio.sg.types._
 
 /**
  * @author staffan

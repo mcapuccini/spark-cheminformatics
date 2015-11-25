@@ -94,10 +94,9 @@ object SGUtils {
   def atoms2LP(molecules: RDD[(Double, IAtomContainer)], 
 			signatureUniverse: RDD[Sig2ID_Mapping],
 			h_start: Int, 
-			h_stop: Int,
-			sc: SparkContext): RDD[(LabeledPoint)]={
+			h_stop: Int): RDD[(LabeledPoint)]={
     
-    atoms2LP_carryData(molecules.map{case(label, mol)=>(Unit,label,mol)}, signatureUniverse, h_start, h_stop, sc).
+    atoms2LP_carryData(molecules.map{case(label, mol)=>(Unit,label,mol)}, signatureUniverse, h_start, h_stop).
       map{case(_, data) => data}
   }
   
@@ -115,8 +114,7 @@ object SGUtils {
       molecules: RDD[(T, Double, IAtomContainer)], 
 			signatureUniverse: RDD[Sig2ID_Mapping],
 			h_start: Int, 
-			h_stop: Int,
-			sc: SparkContext): RDD[(T,LabeledPoint)]={
+			h_stop: Int): RDD[(T,LabeledPoint)]={
     
     val rdd_sigRecordDecision = molecules.map{case((data: T, label: Double, mol: IAtomContainer))=>
       (data, (label, atom2SigRecord(mol, h_start, h_stop)))};
@@ -132,7 +130,7 @@ object SGUtils {
 		  case e: java.lang.UnsupportedOperationException => //This means that the Sign-mapping was empty!
 		}
     
-    sig2LP_carryData(rdd_withFuture_vectors, sc, d);
+    sig2LP_carryData(rdd_withFuture_vectors, d);
   }
   
   /**
@@ -143,8 +141,7 @@ object SGUtils {
   def atoms2LP_UpdateSignMapCarryData[T: ClassTag](molecules: RDD[(T, Double, IAtomContainer)], 
       old_signMap: RDD[Sig2ID_Mapping], 
       h_start: Int, 
-      h_stop: Int,
-      sc: SparkContext): (RDD[(T,LabeledPoint)],RDD[Sig2ID_Mapping])={
+      h_stop: Int): (RDD[(T,LabeledPoint)],RDD[Sig2ID_Mapping])={
     
     // Perform Signature Generation on all molecules 
      val rdd_sigRecordDecision = molecules.map{case((data: T, label: Double, mol: IAtomContainer))=>
@@ -173,7 +170,7 @@ object SGUtils {
 		// Generate feature vectors with the new Sig2ID_Mapping
     val rdd_withFuture_vectors = getFeatureVectors_carryData(rdd_sigRecordDecision, new_signMap);
     
-    (sig2LP_carryData(rdd_withFuture_vectors, sc, d), new_signMap); 
+    (sig2LP_carryData(rdd_withFuture_vectors, d), new_signMap); 
       
   }
   
@@ -413,13 +410,13 @@ object SGUtils {
 	/**
 	 * Transfers records with IDs into LabeledPoint-objects to allow machine learning on them
 	 * @param in    The RDD[SignatureRecordDecision_ID] with data
-	 * @param sc    The SparkContext running in the application
 	 * @return   RDD[LabeledPoint]
 	 */
-	def sig2LP(in: RDD[SignatureRecordDecision_ID], sc: SparkContext, dim: Long=0): 
+	def sig2LP(in: RDD[SignatureRecordDecision_ID], dim: Long=0): 
 	    RDD[LabeledPoint] = {
 		// type SignatureRecord = (Double, Map[Long,Int]);  
 		val data = in;
+		val sc = in.context;
 
 		if (data.isEmpty()) {
 			return (sc.emptyRDD)
@@ -470,13 +467,13 @@ object SGUtils {
 	 * Transfers records with IDs into LabeledPoint-objects to allow machine learning used on them
 	 * 
 	 * @param in     The RDD[SignatureRecordDecision_ID] with data
-	 * @param sc     The SparkContext running in the application
 	 * @return      RDD[LabeledPoint]
 	 */
-	def sig2LP_carryData[T: ClassTag](rdd: RDD[(T, SignatureRecordDecision_ID)], sc: SparkContext, dim: Long=0): 
+	def sig2LP_carryData[T: ClassTag](rdd: RDD[(T, SignatureRecordDecision_ID)], dim: Long=0): 
 	    RDD[(T,LabeledPoint)] = {
 		//type SignatureRecordDecision_ID = (Double, Map[Long, Int]);
-
+		val sc = rdd.context;
+	  
 		if (rdd.isEmpty()) {
 			return (sc.emptyRDD)
 		}
