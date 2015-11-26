@@ -8,6 +8,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.RDD._
 import org.openscience.cdk.exception.InvalidSmilesException
@@ -25,6 +26,29 @@ import se.uu.farmbio.sg.exceptions._
  */
 object SGUtils {
 
+  /**
+   * atoms2Vectors take an RDD of molecules (without any outcome class/regression value) and
+   * turns each molecule into a Vector, using the given signatureUniverse.
+   */
+  /*
+  def atoms2Vectors(
+      molecules: RDD[IAtomContainer], 
+			signatureUniverse: RDD[Sig2ID_Mapping],
+			h_start: Int, 
+			h_stop: Int): RDD[Vector] = {
+    atoms2Vectors_carryData(molecules.map((Unit,_)), signatureUniverse, h_start, h_stop).
+      map(_._2)
+  }
+  
+  atoms2Vectors_carryData[T: ClassTag](
+      molecules: RDD[(T, IAtomContainer)], 
+			signatureUniverse: RDD[Sig2ID_Mapping],
+			h_start: Int, 
+			h_stop: Int): RDD[(T,Vector)] = {
+    
+  }
+      */
+  
   /**
    * atom2LP take a unique molecule and compute the corresponding LabeledPoint
    * in a pre-defined signatureUniverse. This will not add new signatures to the 
@@ -232,9 +256,7 @@ object SGUtils {
 				return signature_map;
 			} 
 			catch {
-			case se: InvalidSmilesException => throw new ParseSmilesException("The smiles was not valid (in 'atom2SigRecord')");
-			case _ : Throwable               => throw new ParseSmilesException("Unknown exception occured (in 'atom2SigRecord'");
-
+			  case ex : Throwable => throw new SignatureGenException("Unknown exception occured (in 'atom2SigRecord'), exception was: " + ex);
 			}
 	}
 
@@ -252,9 +274,10 @@ object SGUtils {
 
 		// Compute the unique Signature -> ID mapping. 
 		val sig2ID_mapping: RDD[Sig2ID_Mapping] = rdd.flatMap { 
-		  //case (_: T, (_: Double, map: Map[String,Int])) => 
+		  //case (carryData: T, (value: Double, map: Map[String,Int])) => 
 		  case (_, (_, map)) => 
-		map.keySet }.
+		    map.keySet 
+		}.
 		//map { case (signature: String, count: Int) => (signature) }.
 		distinct.
 		zipWithUniqueId;
@@ -277,49 +300,48 @@ object SGUtils {
 
 		// Add a unique ID to each record: 
 		val req_with_id: RDD[((T, SignatureRecordDecision), Long)] = rdd.zipWithUniqueId;
-	// So here we store (T, (Double, Map[String, Int])) -> ID
+	  // So here we store (T, (Double, Map[String, Int])) -> ID
 
-	// Sig2ID_Mapping = (String, Long)
-	//((Double, Map[String, Int]), Long) = (SignatureRecordDecision, Long)
-	// transform to: (String, (Double, Int, Long)) format for joining them!
+	  // Sig2ID_Mapping = (String, Long)
+	  //((Double, Map[String, Int]), Long) = (SignatureRecordDecision, Long)
+	  // transform to: (String, (Double, Int, Long)) format for joining them!
 
-	// Expand the Maps 
-	val expanded_rdd = req_with_id.flatMap {
-	//case((carry: T, (dec: Double, mapping: Map[String, Int])), molID: Long ) =>
-	case((carr, (dec, mapping)), molID ) =>
-	  {
-		mapping.toSeq. //get the map as Seq((String,Int), Int)
-		map {
-		case (signature: String, count: Int) =>
-		(signature, (count, molID))
-		}; // result: (signature, (#of occurrences of this signature, MoleculeID))
-	}
-	}
+	  // Expand the Maps 
+	  val expanded_rdd = req_with_id.flatMap {
+	  //case((carry: T, (dec: Double, mapping: Map[String, Int])), molID: Long ) =>
+	    case((carry, (dec, mapping)), molID ) =>
+		    mapping.toSeq. //get the map as Seq((String,Int), Int)
+		      map {
+		        case (signature: String, count: Int) =>
+		          (signature, (count, molID))
+		      } // result: (signature, (#of occurrences of this signature, MoleculeID))
+	  }
 
-	//: RDD[(String,((Double, Int, Long), Long))]
-	// combine the unique_ID with expanded mapping
-	val joined = expanded_rdd.join(uniqueSignatures);
-	// ((signature,height), ((#occurrences, MoleculeID), Signature_ID))
+	  //: RDD[(String,((Double, Int, Long), Long))]
+	  // combine the unique_ID with expanded mapping
+	  val joined = expanded_rdd.join(uniqueSignatures);
+	  // ((signature,height), ((#occurrences, MoleculeID), Signature_ID))
 
-	// (MoleculeID, Signature_ID, #occurrences, value)
-	val res_rdd: RDD[(Long, (Long, Int))] = joined.map {
-	case (signature, ((count, mol_ID), sign_ID)) =>
-	(mol_ID, (sign_ID, count));
-	}
+	  // (MoleculeID, Signature_ID, #occurrences, value)
+	  val res_rdd: RDD[(Long, (Long, Int))] = joined.map {
+	    case (signature, ((count, mol_ID), sign_ID)) =>
+	      (mol_ID, (sign_ID, count));
+	    }
 
-	// Group all records that belong to the same molecule to new row
-	val result: RDD[(Long, Map[Long, Int])] = res_rdd.aggregateByKey(Map.empty[Long, Int])(
+	  // Group all records that belong to the same molecule to new row
+	  val result: RDD[(Long, Map[Long, Int])] = res_rdd.aggregateByKey(Map.empty[Long, Int])(
 			seqOp = (resultType, input) => (resultType + (input._1 -> input._2)),
 			combOp = (resultType1, resultType2) => (resultType1 ++ resultType2)
-			);
+		);
 
-	//(Double, Map[Long, Int]);
-	// add the carry and decision/regression value
-	req_with_id.map{//case ((carry: T, (dec: Double, _: Map[String, Int])), molID: Long)=>
-	  case ((carry, (dec, _)), molID)=>
-	(molID, (carry, dec))}. join(result). map { //case(molID: Long, ((carry: T, dec: Double),(mapping: Map[Long, Int])))=>
-	  case(molID, ((carry, dec),(mapping)))=>
-	(carry, (dec, mapping))}
+	  //(Double, Map[Long, Int]);
+	  // add the carry and decision/regression value
+	  req_with_id.map{//case ((carry: T, (dec: Double, _: Map[String, Int])), molID: Long)=>
+	    case ((carry, (dec, _)), molID)=>
+	      (molID, (carry, dec))}. join(result). map { //case(molID: Long, ((carry: T, dec: Double),(mapping: Map[Long, Int])))=>
+	        case(molID, ((carry, dec),(mapping)))=>
+	          (carry, (dec, mapping))
+	  }
 
 
 	}
@@ -370,43 +392,89 @@ object SGUtils {
 		val req_with_id: RDD[(SignatureRecordDecision, Long)] = rdd.zipWithUniqueId();
 
 
-	// Sig2ID_Mapping = (String, Long)
-	//((Double, Map[String, Int]), Long) = (SignatureRecordDecision, Long)
-	// transform to: (String, (Double, Int, Long)) format for joining them!
+	  // Sig2ID_Mapping = (String, Long)
+	  //((Double, Map[String, Int]), Long) = (SignatureRecordDecision, Long)
+	  // transform to: (String, (Double, Int, Long)) format for joining them!
 
-	// Expand the Maps 
-	val expanded_rdd = req_with_id.flatMap {
-	case((dec: Double, mapping: Map[String, Int]), id: Long ) =>
-	{
-		mapping.toSeq. //get the map as Seq((String,Int), Int)
-		map {
-		case (signature: String, count: Int) =>
-		(signature, (dec, count, id))
-		}; // result: (signature, (value/class, #of occurrences of this signature, MoleculeID))
-	}
-	}
+	  // Expand the Maps 
+	  val expanded_rdd = req_with_id.flatMap {
+	    case((dec: Double, mapping: Map[String, Int]), id: Long ) =>
+	    {
+		    mapping.toSeq. //get the map as Seq((String,Int), Int)
+		      map {
+		      case (signature: String, count: Int) =>
+		        (signature, (dec, count, id))
+		      }; // result: (signature, (value/class, #of occurrences of this signature, MoleculeID))
+	    }
+	  }
 
-	//: RDD[(String,((Double, Int, Long), Long))]
-	// combine the unique_ID with expanded mapping
-	val joined = expanded_rdd.join(uniqueSignatures);
-	// ((signature,height), ((value/class, #occurrences, MoleculeID), Signature_ID))
+	  //: RDD[(String,((Double, Int, Long), Long))]
+	  // combine the unique_ID with expanded mapping
+	  val joined = expanded_rdd.join(uniqueSignatures);
+	  // ((signature,height), ((value/class, #occurrences, MoleculeID), Signature_ID))
 
-	// (MoleculeID, Signature_ID, #occurrences, value)
-	val res_rdd: RDD[(Long, (Long, Int, Double))] = joined.map {
-	case (signature, ((value, count, mol_ID), sign_ID)) =>
-	(mol_ID, (sign_ID, count, value));
-	}
+	  // (MoleculeID, Signature_ID, #occurrences, value)
+	  val res_rdd: RDD[(Long, (Long, Int, Double))] = joined.map {
+	    case (signature, ((value, count, mol_ID), sign_ID)) =>
+	      (mol_ID, (sign_ID, count, value));
+	  }
 
-	// Group all records that belong to the same molecule to new row
-	val result: RDD[(Double, Map[Long, Int])] = res_rdd.aggregateByKey((0.0, Map.empty[Long, Int]))(
+	  // Group all records that belong to the same molecule to new row
+	  val result: RDD[(Double, Map[Long, Int])] = res_rdd.aggregateByKey((0.0, Map.empty[Long, Int]))(
 			seqOp = (resultType, input) => (input._3, resultType._2 + (input._1 -> input._2)),
 			combOp = (resultType1, resultType2) => (resultType1._1, resultType1._2 ++ resultType2._2)).
 			map { x => x._2 }
 
-	result
-
+	  result
 	}
 
+	
+	/**
+	 * sig2Vectors transfers records with ID into Vector-objects
+	 */
+	def sig2Vectors(in: RDD[SignatureRecord_ID], dim: Long=0):
+	    RDD[Vector] = {
+	  val sc = in.context;
+	  
+	  if(in.isEmpty) {
+	    return sc.emptyRDD;
+	  }
+	  
+	  val sparse_vectors = in.map { (record) =>
+
+		  val arr_length = record.size;
+		  var key_arr = Array.ofDim[Int](arr_length);
+		  var value_arr = Array.ofDim[Double](arr_length);
+
+		  // construct arrays for the signatures
+		  val sortedMap = SortedMap[Long, Int]() ++ record; //make the vectors sorted!
+		  var i = 0;
+		  sortedMap.map {
+		    case (key, value) =>
+		      key_arr(i) = key.toInt;
+		      value_arr(i) = value;
+		      i += 1;
+		    }
+		  (key_arr, value_arr);
+		}
+	  
+	  // Determine number of features.
+		val d = if(dim>0){
+		  dim;
+		}
+		else {
+				sparse_vectors.cache;
+				sparse_vectors.map {
+				case (indices, values) =>
+				  indices.max
+				}.reduce(math.max) + 1
+		}
+	  
+	  sparse_vectors.map{case(indices, values) =>
+	    Vectors.sparse(d.toInt, indices, values)
+	  }
+	}
+	
 	/**
 	 * Transfers records with IDs into LabeledPoint-objects to allow machine learning on them
 	 * @param in    The RDD[SignatureRecordDecision_ID] with data
@@ -441,24 +509,21 @@ object SGUtils {
 		}
 
 		// Determine number of features.
-
 		val d = if(dim>0){
 		  dim;
 		}
 		else {
 				parsed_data.cache;
 				parsed_data.map {
-				case (label, indices, values) =>
-				indices.max
+				  case (label, indices, values) =>
+				    indices.max
 				}.reduce(math.max) + 1
 		}
 
-		val rdd_labeledPoint = parsed_data.map {
-		case (label, indices, values) =>
-		LabeledPoint(label, Vectors.sparse(d.toInt, indices, values))
+		parsed_data.map {
+		  case (label, indices, values) =>
+		    LabeledPoint(label, Vectors.sparse(d.toInt, indices, values))
 		}
-
-		return rdd_labeledPoint;
 
 	}
 
