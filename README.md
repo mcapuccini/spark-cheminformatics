@@ -26,14 +26,14 @@ This package provides custom Spark input formats for chemical structures. To use
 
 ### Usage 
 This is how you read a SDF file using the SDFInputFormat (for other input formats works in the same way).
-
-    val sc = new SparkContext(conf)
-    //This sets the number of SDF loaded as a single string, in many cases it makes sense to 
-    //have it set to more than 1 in order to reuse objects within a single mapper. Default
-    //value is 30 for SDF.
-    sc.hadoopConfiguration.set("se.uu.farmbio.parsers.SDFRecordReader.size", 30)
-    val sdfRDD = sc.hadoopFile[LongWritable, Text, SDFInputFormat]("/path/to/molecules.sdf")
-
+```scala
+val sc = new SparkContext(conf)
+//This sets the number of SDF loaded as a single string, in many cases it makes sense to 
+//have it set to more than 1 in order to reuse objects within a single mapper. Default
+//value is 30 for SDF.
+sc.hadoopConfiguration.set("se.uu.farmbio.parsers.SDFRecordReader.size", 30)
+val sdfRDD = sc.hadoopFile[LongWritable, Text, SDFInputFormat]("/path/to/molecules.sdf")
+```
 ## Signature Generation
 
 This library creates complete molecule-signatures (a type of molecular fingerprint) and provides functionality to create [LabeledPoint](https://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.mllib.regression.LabeledPoint) and [Vector](https://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.mllib.linalg.Vector)s which can be used for machine-learning using Spark. To use this library using Maven, add the following to your `pom.xml` file:
