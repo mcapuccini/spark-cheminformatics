@@ -1,5 +1,3 @@
-//src/main/scala=main
-//src/test/scala=tests
 P=
 Xcheckinit=false
 Xdisable-assertions=false
@@ -36,8 +34,7 @@ scala.compiler.installation=2.10
 scala.compiler.sourceLevel=2.10
 scala.compiler.useProjectSettings=true
 stopBuildOnError=true
-target=jvm-1.8
+target=jvm-1.7
 unchecked=false
-useScopesCompiler=true
 verbose=false
 withVersionClasspathValidator=true

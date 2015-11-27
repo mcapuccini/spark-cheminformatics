@@ -7,7 +7,6 @@ import org.scalatest.junit.JUnitRunner
 import org.openscience.cdk.smiles.SmilesParser
 import org.openscience.cdk.silent.SilentChemObjectBuilder
 import se.uu.farmbio.sg.types._
-
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import se.uu.farmbio.utils.SparkUtils
@@ -19,6 +18,7 @@ import org.apache.spark.mllib.linalg.SparseVector
 import org.apache.spark.mllib.linalg.DenseVector
 import java.nio.file._
 import scala.collection.immutable.Map
+import org.openscience.cdk.interfaces.IAtomContainer
 
 
 object DataForTest{
@@ -47,34 +47,82 @@ object DataForTest{
  * @author staffan
  */
 @RunWith(classOf[JUnitRunner])
-class SGUtilsTest extends FunSuite with SharedSparkContext with BeforeAndAfter {
-
+class SGUtilsTest extends FunSuite with SharedSparkContext {
+  conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer");
 	SparkUtils.silenceSpark();
+	
+	
+	test("atoms2Vectors and atoms2Vectors_carryData"){
+	  testAtoms2Vectors();
+	  def testAtoms2Vectors()={
+	    
+	    // For empty mappings
+	    val emptySigMapping: RDD[(String, Long)] = sc.parallelize(Seq());
+	  
+	    val sp = new SmilesParser(SilentChemObjectBuilder.getInstance());
+		  val mol = sp.parseSmiles("C=O");
+		  val mol_rdd = sc.parallelize(Seq(mol));
+	    //println("mol_rdd.length: " + mol_rdd.count);
+	    val rdd_vec_0length = SGUtils.atoms2Vectors(mol_rdd, emptySigMapping, 0, 2);
+
+	    assert(rdd_vec_0length.count == 0, "empty sigMapping->no output should be generated");
+	    //assert(rdd_vec_0length.collect()(0).size == 1, "The size should be 1 (defined as size +1)");
+	    //assert(rdd_vec_0length.collect()(0).toArray == Array(), "should return empty array");
+	  
+	    // For mappings that contain some data
+	    val sigMapping: RDD[(String, Long)] = sc.parallelize(Seq(("[C]", 1L), ("[C]([O])",3L)));
+		  val mol2: IAtomContainer = sp.parseSmiles("CO");
+		  val mols = sc.parallelize(Seq(mol, mol2));
+		  val rdd_vectors_nonEmpty = SGUtils.atoms2Vectors(mols, sigMapping, 0, 2);
+		
+		  val denseRep = Array(0.0, 1.0, 0.0, 1.0);
+		  assert(TestUtils.matchArrays(rdd_vectors_nonEmpty.collect()(1).toDense.toArray,denseRep), 
+		    "The correct Vector should be created");
+	  
+		  //Now test the same thing for the _carryData:
+		  val mol_rdd_carry = sc.parallelize(Seq((42,mol), (5,mol2)));
+		  val rdd_vec_0length_carry = SGUtils.atoms2Vectors_carryData(mol_rdd_carry, emptySigMapping, 0, 2);
+		  assert(rdd_vec_0length_carry.count == 0, "empty sigMapping->no output should be generated");
+	    
+		  // _carryData with mapping containg data
+		  val rdd_v_nonEmpty_carry = SGUtils.atoms2Vectors_carryData(mol_rdd_carry, sigMapping, 0, 2);
+		  assert(rdd_v_nonEmpty_carry.count == 2, "correct number of vectors should be returned");
+		  assert((rdd_v_nonEmpty_carry.collect()(0)._1 == 42) &&
+		      (rdd_v_nonEmpty_carry.collect()(1)._1 == 5), "The carry data should be correct!");
+		  assert(TestUtils.matchArrays(rdd_v_nonEmpty_carry.collect()(1)._2.toDense.toArray,denseRep), 
+		    "The correct Vector should be created");
+
+	  }
+	  
+	}
 	
 	/**
 	 * atom2LP should return the correct stuff
 	 */
 	test("atom2LP should return the correct stuff"){
-	  // For empty mappings
-	  val emptySigMapping: RDD[(String, Long)] = sc.parallelize(Seq());
+	  testAtom2LP();
+	  def testAtom2LP() {
+	   // For empty mappings
+	   val emptySigMapping: RDD[(String, Long)] = sc.parallelize(Seq());
 	  
-	  val sp = new SmilesParser(SilentChemObjectBuilder.getInstance());
-		val mol = sp.parseSmiles("C=O");
+	   val sp = new SmilesParser(SilentChemObjectBuilder.getInstance());
+		 val mol = sp.parseSmiles("C=O");
 	  
-	  val lp_should_be_empty = SGUtils.atom2LP(mol, 1.0, emptySigMapping, 0, 2);
-	  assert(lp_should_be_empty.label == 1.0, "The given label should be the one returned");
-	  assert(lp_should_be_empty.features.size == 0, "The size should be 0 (the vector should be empty)");
+	   val lp_should_be_empty = SGUtils.atom2LP(mol, 1.0, emptySigMapping, 0, 2);
+	   assert(lp_should_be_empty.label == 1.0, "The given label should be the one returned");
+	   assert(lp_should_be_empty.features.size == 0, "The size should be 0 (the vector should be empty)");
 	  
-	  // For mappings that contain some data
-	  val sigMapping: RDD[(String, Long)] = sc.parallelize(Seq(("[C]", 1L), ("[C]([O])",3L)));
-		val mol2 = sp.parseSmiles("CO");
-		val lp_nonEmpty = SGUtils.atom2LP(mol2, -150.0, sigMapping, 0, 2);
+	   // For mappings that contain some data
+	   val sigMapping: RDD[(String, Long)] = sc.parallelize(Seq(("[C]", 1L), ("[C]([O])",3L)));
+		 val mol2 = sp.parseSmiles("CO");
+		 val lp_nonEmpty = SGUtils.atom2LP(mol2, -150.0, sigMapping, 0, 2);
 
-		assert(lp_nonEmpty.label == -150.0, "The given label should be the one returned");
+		 assert(lp_nonEmpty.label == -150.0, "The given label should be the one returned");
 		
-		val denseRep = Array(0.0, 1.0, 0.0, 1.0);
-		assert(TestUtils.matchArrays(lp_nonEmpty.features.toDense.toArray,denseRep), 
+		 val denseRep = Array(0.0, 1.0, 0.0, 1.0);
+		 assert(TestUtils.matchArrays(lp_nonEmpty.features.toDense.toArray,denseRep), 
 		    "The correct LP-s should be created");
+	  }
 	}
 	
 	/**
@@ -82,7 +130,8 @@ class SGUtilsTest extends FunSuite with SharedSparkContext with BeforeAndAfter {
 	 * so only this method is explicitly tested. (The atoms2LP only attach bogus data to carry)
 	 */
 	test("atoms2LP and atoms2LP_carryData"){
-	  
+	  testAtoms2LP_atoms2LP_carryData();
+	  def testAtoms2LP_atoms2LP_carryData(){
 	  // For empty mappings
 	  val emptySigMapping: RDD[(String, Long)] = sc.parallelize(Seq());
 	  val sp = new SmilesParser(SilentChemObjectBuilder.getInstance());
@@ -129,10 +178,13 @@ class SGUtilsTest extends FunSuite with SharedSparkContext with BeforeAndAfter {
 	  }
 	  
 	}
+	}
 	
 	
 	test("atoms2LP_UpdateSignMapCarryData"){
+	  testAtoms2LP_UpdateSignMapCarryData();
 	  
+	  def testAtoms2LP_UpdateSignMapCarryData(){
 	  // Starting with a empty signature Mapping
 	  // ------------------------------------------------------------------------
 	  val emptySigMapping: RDD[(String, Long)] = sc.parallelize(Seq());
@@ -189,28 +241,31 @@ class SGUtilsTest extends FunSuite with SharedSparkContext with BeforeAndAfter {
 		assert(TestUtils.matchArraysDiffLength(lp4.features.toDense.toArray, lp.features.toDense.toArray), 
 		    "The new and old lp's should match!");
 	}
+	}
 
 	/**
 	 * atom2SigRecord should return the correct answer
 	 */
 	test("atom2SigRecord should return the correct answer"){
+	  testAtom2SigRecord();
+	  def testAtom2SigRecord(){
+		  val sp = new SmilesParser(SilentChemObjectBuilder.getInstance());
+		  val mol = sp.parseSmiles("C=O");
+		  val out: Map[String,Int] = SGUtils.atom2SigRecord(mol, 0, 15);
+		  val corrMap = Map("[C]"->1, "[O]"->1, "[C](=[O])"-> 1,"[O](=[C])"->1);
+		  assert(corrMap == out, "The output should be correct");
 
-		val sp = new SmilesParser(SilentChemObjectBuilder.getInstance());
-		val mol = sp.parseSmiles("C=O");
-		val out: Map[String,Int] = SGUtils.atom2SigRecord(mol, 0, 15);
-		val corrMap = Map("[C]"->1, "[O]"->1, "[C](=[O])"-> 1,"[O](=[C])"->1);
-		assert(corrMap == out, "The output should be correct");
+		  // More difficult molecule
+		  val paracetamol="CC(=O)Nc1ccc(cc1)O";
+		  val paracetamol_IAtomContainer = sp.parseSmiles(paracetamol);
 
-		// More difficult molecule
-		val paracetamol="CC(=O)Nc1ccc(cc1)O";
-		val paracetamol_IAtomContainer = sp.parseSmiles(paracetamol);
+		  val out2: Map[String, Int] = SGUtils.atom2SigRecord(paracetamol_IAtomContainer, 0, 15);
+		  assert(out2.size > 10, "Should be possible to generate signatures for valid atom");
 
-		val out2: Map[String, Int] = SGUtils.atom2SigRecord(paracetamol_IAtomContainer, 0, 15);
-		assert(out2.size > 10, "Should be possible to generate signatures for valid atom");
-
-		val out3: (Double, Map[String, Int]) = SGUtils.atom2SigRecordDecision(paracetamol_IAtomContainer, 0.0, 0, 15);
-		assert(out3._1 == 0.0, "The decision should be keept when performing SG");
-		assert(TestUtils.compareEqualLists(out3._2.toList, out2.toList), "The SG should be the same from both functions");
+		  val out3: (Double, Map[String, Int]) = SGUtils.atom2SigRecordDecision(paracetamol_IAtomContainer, 0.0, 0, 15);
+		  assert(out3._1 == 0.0, "The decision should be keept when performing SG");
+		  assert(TestUtils.compareEqualLists(out3._2.toList, out2.toList), "The SG should be the same from both functions");
+	  }
 	}
 
 
@@ -218,7 +273,8 @@ class SGUtilsTest extends FunSuite with SharedSparkContext with BeforeAndAfter {
 	 * sig2ID_carryData & getFeatureVectors_carryData
 	 */
 	test("sig2ID_carryData & getFeatureVectors_carryData"){
-
+	  testSig2ID_And_getFeatureVectors_CARRY_VERSION();
+	  def testSig2ID_And_getFeatureVectors_CARRY_VERSION(){
 	  val rdd = DataForTest.getSignRecDec_carry(sc);
     val (rdd_withID_carryData, sig2Id_mapping_carryData) = DataForTest.getSig2ID_carry(rdd)
 	  
@@ -278,7 +334,7 @@ class SGUtilsTest extends FunSuite with SharedSparkContext with BeforeAndAfter {
 
 		}
 
-
+	  }
 	}
 
 
@@ -286,7 +342,8 @@ class SGUtilsTest extends FunSuite with SharedSparkContext with BeforeAndAfter {
 	 * sig2ID & getFeatureVectors
 	 */
 	test("sig2ID & getFeatureVectors"){
-	  
+	  testSig2ID_and_getFeatureVectors();
+	  def testSig2ID_and_getFeatureVectors(){
 	  val rdd_Without = DataForTest.getSignRecDec_carry(sc).map(_._2);
 	  val (rdd_withID, sig2Id_mapping) = DataForTest.getSig2ID_withOutCarry(rdd_Without);
 	  
@@ -344,13 +401,15 @@ class SGUtilsTest extends FunSuite with SharedSparkContext with BeforeAndAfter {
 
 		}
 	}
+	}
 
 
 	/**
 	 * sig2LP
 	 */
 	test("sig2LP"){
-	  
+	  testSig2LP();
+	  def testSig2LP(){
 	  val signRecDec = DataForTest.getSignRecDec_carry(sc).map{case(_:Int,x)=>x}; // remove the carryData-part
 	  val (rdd_withID, sig2Id_mapping)= SGUtils.sig2ID(signRecDec);
 	  
@@ -371,11 +430,14 @@ class SGUtilsTest extends FunSuite with SharedSparkContext with BeforeAndAfter {
 		assert(TestUtils.compareEqualLists(matching.toList, List(1,1,1,1)),
 				"The output from LP should match the input");
 	}
+	}
 
 	/**
 	 * sig2LP_carryData
 	 */
 	test("sig2LP_carryData"){
+	  testSig2LP_carryData();
+	  def testSig2LP_carryData(){
 	  val signRecDec_carry = DataForTest.getSignRecDec_carry(sc)
 	  val (rdd_withID_carryData, _)= SGUtils.sig2ID_carryData(signRecDec_carry);
 		val lp_out = SGUtils.sig2LP_carryData(rdd_withID_carryData).collect;
@@ -403,6 +465,7 @@ class SGUtilsTest extends FunSuite with SharedSparkContext with BeforeAndAfter {
 		}
 
 		}
+	  }
 	}
 
 }
