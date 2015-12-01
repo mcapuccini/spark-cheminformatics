@@ -24,7 +24,6 @@ object SG_Example {
     val moleculesAfterSG = mols.map{case(dec_class, molecule) => SGUtils.atom2SigRecordDecision(molecule, dec_class, h_start=1, h_stop=3)};
     val (result, sig2ID_universe) = SGUtils.sig2ID(moleculesAfterSG);
     val resultAsLP = SGUtils.sig2LP(result);
-    resultAsLP.foreach(println)
     // Use the labeledPoints to build a classifier of your own choice
     // ...
     
@@ -41,10 +40,7 @@ object SG_Example {
 		    testMol2));
 		
 		val testLPs = SGUtils.atoms2Vectors(testMols, sig2ID_universe, h_start=1, h_stop=3);
-		println("Vectors: ");
-		testLPs.foreach (println);
 		// Use the previously created classifier to test these molecules.
 		// ...
-		println("END...");
   }
 }
