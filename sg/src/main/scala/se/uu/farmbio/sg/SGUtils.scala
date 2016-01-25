@@ -197,27 +197,35 @@ object SGUtils {
       h_stop: Int): (RDD[(T,LabeledPoint)],RDD[Sig2ID_Mapping])={
     
     // Perform Signature Generation on all molecules 
-     val rdd_sigRecordDecision = molecules.map{case((data: T, label: Double, mol: IAtomContainer))=>
+     val rdd_sigRecordDecision = molecules.map{case((data, label, mol))=>
       (data, (label, atom2SigRecord(mol, h_start, h_stop)))};
     
     //Pick out all signatures
       val allSignatures: RDD[String] = rdd_sigRecordDecision.flatMap { 
-		  case (_: T, (_: Double, theMap: Map[String, Int])) => 
+		  case (_, (_, theMap)) => 
 		theMap.keySet }.distinct
 
 		// Find the highest previous signatureID:
-		val higestID = 
-		try{
-		  old_signMap.map { case(_:String, id: Long) => id }.max;
+		var new_signMap: RDD[(String,Long)] = null;
+		if(old_signMap != null){
+		
+		  val higestID = 
+		  try{
+		    old_signMap.map { case(_:String, id: Long) => id }.max;
+		  }
+		  catch{
+		    case _: java.lang.UnsupportedOperationException => 0L // meaning no old signatures present
+		  } 
+		
+		  // Find the new Sig2ID_Mapping with both old and new signatures
+		  new_signMap = allSignatures.subtract(old_signMap.map { case(sign: String, _: Long) => sign }).
+		  zipWithUniqueId.map { case(sign: String, old_id: Long) => (sign, old_id+higestID+1) } ++ old_signMap;
+		} else {
+		  // there was no old mapping
+		  new_signMap = allSignatures.zipWithUniqueId;
 		}
-		catch{
-		  case _: java.lang.UnsupportedOperationException => 0L // meaning no old signatures pesent
-		} 
 		
-		// Find the new Sig2ID_Mapping with both old and new signatures
-		val new_signMap = allSignatures.subtract(old_signMap.map { case(sign: String, _: Long) => sign }).
-		zipWithUniqueId.map { case(sign: String, old_id: Long) => (sign, old_id+higestID+1) } ++ old_signMap;
-		
+		  
 		val d = new_signMap.map{case (_,id) => id}.max +1 ;
 		
 		// Generate feature vectors with the new Sig2ID_Mapping

@@ -19,6 +19,17 @@ import org.apache.spark.mllib.linalg.DenseVector
 import java.nio.file._
 import scala.collection.immutable.Map
 import org.openscience.cdk.interfaces.IAtomContainer
+import org.openscience.cdk.graph.Cycles
+import java.io.FileInputStream
+import org.openscience.cdk.exception.CDKException
+import java.io.BufferedReader
+import org.openscience.cdk.tools.manipulator.AtomContainerManipulator
+import java.io.IOException
+import org.openscience.cdk.aromaticity.Aromaticity
+import org.openscience.cdk.interfaces.IChemObjectBuilder
+import org.openscience.cdk.aromaticity.ElectronDonation
+import java.io.InputStreamReader
+import org.openscience.cdk.exception.InvalidSmilesException
 
 
 object DataForTest{
@@ -41,6 +52,46 @@ object DataForTest{
   def getSig2ID_withOutCarry(rdd: RDD[SignatureRecordDecision]) = {
     SGUtils.sig2ID(rdd);
   }
+  
+  def readSMILESFile_NoSpark(path: String): List[IAtomContainer] ={
+
+			val bldr: IChemObjectBuilder   = SilentChemObjectBuilder.getInstance();
+	val arom: Aromaticity   = new Aromaticity(ElectronDonation.daylight(),
+			Cycles.or(Cycles.all(), Cycles.all(6)));
+
+	val brdr = new BufferedReader(new InputStreamReader(new FileInputStream(path)));
+	val smipar = new SmilesParser(bldr);
+
+	//		List<IAtomContainer> parsedMols = new ArrayList<>();
+	var parsedMols: List[IAtomContainer] = List();
+	var skippedMols=0;
+
+	var line: String = brdr.readLine();
+	var continue = true;
+	while (continue) {
+
+		var mol: IAtomContainer = null; 
+	  try{
+		  mol = smipar.parseSmiles(line);
+		  arom.apply(mol);
+		  AtomContainerManipulator.suppressHydrogens(mol);
+		  parsedMols = parsedMols :+ mol;
+	  }catch{
+	    case e: InvalidSmilesException => skippedMols+=1;
+	    case e: CDKException => skippedMols+=1;
+	  }	finally {
+		  line = brdr.readLine();
+		  if(line == null){
+			  continue = false;
+		  }
+	  }   	
+	}
+	if (parsedMols.size<=0){
+		throw new IOException("No molecules in SMILES-file.");
+	}
+
+	return parsedMols;
+	}
 }
 
 /**
@@ -50,6 +101,31 @@ object DataForTest{
 class SGUtilsTest extends FunSuite with SharedSparkContext {
   conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer");
 	SparkUtils.silenceSpark();
+	
+	
+	test("atoms2LP_UpdataSignMapCarryData from SMILES-file"){
+	  testAtoms2LPForEmptyFile();
+	  def testAtoms2LPForEmptyFile() ={
+	    val mols = DataForTest.readSMILESFile_NoSpark(this.getClass.getResource("SMILES_FILE.txt").getPath);
+	    var id=0;
+	    val molsWithSeqID = mols.map { mol => id=id+1; (id, id.toDouble,mol) };
+	    val molsWithID_RDD = sc.makeRDD(molsWithSeqID);
+	    
+	    assert(mols.size == 499);
+	    
+//	    val molsRDD = sc.makeRDD(mols).
+//        zipWithUniqueId().
+//        map{ case(mol, id) => (0.0, id.toDouble, mol)};
+      
+//      molsRDD.take(10).foreach(println);
+	    val (rddLPs, mapping) = SGUtils.atoms2LP_UpdateSignMapCarryData(molsWithID_RDD,null, 1, 3);
+//	    rddLPs.take(10).foreach(println);
+      assert(rddLPs.count == 499);
+      assert(mapping.count > 0);
+	    
+	  }
+	}
+	
 	
 	
 	test("atoms2Vectors and atoms2Vectors_carryData"){
